@@ -2,12 +2,12 @@
 
 #' HTcondbiasest
 #' The function to estimate the conditional biases for the HT estimator of a total, for the non-stratiﬁed sampling designs. For one or several given variables of interest as input, this function returns a vector with the estimates of the conditional bias of the HT estimator where each row corresponds to a sample unit.
-#' @param data  the original data set with the sample, the variable(s) of interest
-#' @param varname  the name(s) of the variable(s) of interest
-#' @param gn  the population size
-#' @param method  the sampling design : si for simple random sampling, poisson, rejective
-#' @param pii  the first order inclusion probabilities
-#' @param pkey  the primary key to keep as an identifier of every unit
+#' @param data  Original data set with the sample, the variable(s) of interest
+#' @param varname  Name(s) of the variable(s) of interest
+#' @param gn  Population size
+#' @param method  Sampling design : si for simple random sampling, poisson, rejective
+#' @param pii  First order inclusion probabilities
+#' @param pkey  Primary key to keep as an identifier of every unit
 #' @param remerge  True/False to remerge the conditional bias with the original data set
 #'
 #' @return Returns a data set with the conditional bias of each sampled unit
@@ -89,12 +89,12 @@
 
 #' strata_HTcondbiasest
 #' The function to estimate the conditional biases for the HT estimator of a total, for the stratified sampling designs. For one or several given variables of interest as input, this function returns a vector with the estimates of the conditional bias of the HT estimator where each row corresponds to a sample unit.
-#' @param data  the original data set with the sample, the variable(s) of interest
-#' @param strataname  the name of the variable to use for stratification
-#' @param varname  the name(s) of the variable(s) of interest
-#' @param gnh  the population size in each stratum
-#' @param method  the sampling design : si for simple random sampling, poisson, rejective
-#' @param pii  the first order inclusion probabilities
+#' @param data  Original data set with the sample, the variable(s) of interest
+#' @param strataname  Name of the variable to use for stratification
+#' @param varname  Name(s) of the variable(s) of interest
+#' @param gnh  Lopulation size in each stratum
+#' @param method  Sampling design : si for simple random sampling, poisson, rejective
+#' @param pii  First order inclusion probabilities
 #' @param remerge  True/False to remerge the conditional bias with the original data set
 #'
 #' @return Returns a dataframe with the conditional bias of each sampled unit
@@ -140,13 +140,15 @@
 }
 
 
+
+
 #' robustest
 #'
-#' @param data  the original data set with the sample, the variable(s) of interest
-#' @param varname  the name(s) of the variable(s) of interest
-#' @param gn  the population size
-#' @param method  the sampling design : si for simple random sampling, poisson, rejective
-#' @param pii  the first order inclusion probabilities
+#' @param data  Original data set with the sample, the variable(s) of interest
+#' @param varname  Name(s) of the variable(s) of interest
+#' @param gn  Population size
+#' @param method  Sampling design : si for simple random sampling, poisson, rejective
+#' @param pii  First order inclusion probabilities
 #'
 #' @return Computes the robust estimator of Beaumont and al.(2013) using the conditional bias and the minmax criterion to compute the tuning constant
 #' @export
@@ -191,14 +193,16 @@
 }
 
 
+
+
 #' strata_robustest
 #'
-#' @param data  the original data set with the sample, the variable(s) of interest
-#' @param strataname  the name of the variable to use for stratification
-#' @param varname  the name of the variable(s) of interest
-#' @param gnh  the population size in each stratum
-#' @param method  the sampling design : si for simple random sampling, poisson, rejective
-#' @param pii  the first order inclusion probabilities
+#' @param data  Original data set with the sample, the variable(s) of interest
+#' @param strataname  Name of the variable to use for stratification
+#' @param varname  Name(s) of the variable(s) of interest
+#' @param gnh  Population size in each stratum
+#' @param method  Sampling design : si for simple random sampling, poisson, rejective
+#' @param pii  First order inclusion probabilities
 #'
 #' @return Computes the robust estimator of Beaumont and al.(2013) using the conditional bias and the minmax criterion to compute the tuning constant
 #' @export
@@ -233,10 +237,12 @@
 }
 
 
+
+
 #' tuningconst
 #'
-#' @param bi  conditional bias
-#' @param tailleseq  maximum number of iterations for the research of the minimum
+#' @param bi  Conditional bias
+#' @param tailleseq  Maximum number of iterations for the research of the minimum
 #' @importFrom stats optimize
 #' @return Computes the robust weight associated to the Beaumont et al (2013) estimator
 #' @export
@@ -253,15 +259,16 @@ tuningconst = function(bi, tailleseq=1000) {
 
 
 
+
 #' weightswin
 #'
-#' @param data  the original data set with the sample, the variable(s) of interest
-#' @param varname  the name of the variable(s) of interest
-#' @param gn  the population size
-#' @param method  the sampling design : si for simple random sampling, poisson, rejective
-#' @param pii  the first order inclusion probabilities
-#' @param typewin  winsorized estimator : Beaumont et al., Standard or Dalen-Tambay
-#' @param tailleseq  maximum number of iterations for the research of the minimum
+#' @param data  Original data set with the sample, the variable(s) of interest
+#' @param varname  Name(s) of the variable(s) of interest
+#' @param gn  Population size
+#' @param method  Sampling design : si for simple random sampling, poisson, rejective
+#' @param pii  First order inclusion probabilities
+#' @param typewin  Winsorized estimator : Beaumont et al., Standard or Dalen-Tambay
+#' @param tailleseq  Maximum number of iterations for the research of the minimum
 #' @param remerge True/False to remerge the conditional bias with the original data set
 #'
 #' @return Computes the robust weight associated to the winsorized estimator
@@ -327,7 +334,6 @@ tuningconst = function(bi, tailleseq=1000) {
         }
       }
     }
-
     if (typewin == "DT") {
       if (length(m)==1){
         copt = determinconstwDT(di=1/pii,x=data[,m],bc,tailleseq)
@@ -359,16 +365,19 @@ tuningconst = function(bi, tailleseq=1000) {
     result
   }
 
+
+
+
 #' strata_weightswin
 #'
-#' @param data  the original data set with the sample, the variable(s) of interest
-#' @param strataname  the name of the variable to use for stratification
-#' @param varname  the name of the variable(s) of interest
-#' @param gnh  the population size in each stratum
-#' @param method  the sampling design : si for simple random sampling, poisson, rejective
-#' @param pii  the first order inclusion probabilities
-#' @param typewin  winsorized estimator : Beaumont et al., Standard or Dalen-Tambay
-#' @param tailleseq  maximum number of iterations for the research of the minimum
+#' @param data  Original data set with the sample, the variable(s) of interest
+#' @param strataname  Name of the variable to use for stratification
+#' @param varname  Name(s) of the variable(s) of interest
+#' @param gnh  Population size in each stratum
+#' @param method  Sampling design : si for simple random sampling, poisson, rejective
+#' @param pii  First order inclusion probabilities
+#' @param typewin  Winsorized estimator : Beaumont et al., Standard or Dalen-Tambay
+#' @param tailleseq  Maximum number of iterations for the research of the minimum
 #' @param remerge  True/False to remerge the conditional bias with the original data set
 #'
 #'
@@ -424,57 +433,68 @@ tuningconst = function(bi, tailleseq=1000) {
   }
 
 
+
+
 #' determinconstws
 #'
-#' @param di  initial sampling weight : inverse of the first order inclusion probabilities
-#' @param x  variable(s) of interest
-#' @param bc  conditional bias
-#' @param tailleseq  maximum number of iterations for the research of the minimum
+#' @param pii  First order inclusion probabilities
+#' @param x  Variable(s) of interest
+#' @param bi  Conditional bias
+#' @param tailleseq  Maximum number of iterations for the research of the minimum
 #' @importFrom stats uniroot
 #' @return Computes the robust weights associated to the standard winsorized estimator
 #' @export
 #'
 
-determinconstws = function(pii, x, bc, tailleseq) {
+determinconstws = function(pii, x, bi, tailleseq) {
+  if (max(bi) < -min(bi)) {
+    stop("The condition for existence is not satisfied.")
+  }
   di <- 1 / pii
-  functiontws = function(a, di, x, bc) {
+  functiontws = function(a, di, x, bi) {
     testpos = function(x, tconst=1.345){
       res = rep(0, length(x))
       res[(x-tconst) > 0] = (x-tconst)[(x-tconst) > 0]
       return(res)
     }
-    rest = -colSums(sapply(a,testpos,x=as.matrix(di*x)))
-    copt = rest+0.5*(min(bc)+max(bc))
+    rest = -colSums(sapply(a, testpos, x=as.matrix(di*x)))
+    copt = rest + 0.5*(min(bi)+max(bi))
     return(copt)
   }
-  resultat <- uniroot(functiontws, c(0,max(di*x)), check.conv=FALSE, tol=.Machine$double.eps^10, maxiter=tailleseq, trace=0, di=di, x=x, bc=bc)
+  resultat <- uniroot(functiontws, c(0,max(di*x)), check.conv=FALSE, tol=.Machine$double.eps^10, maxiter=tailleseq, trace=0, di=di, x=x, bi=bi)
   return(resultat$root)
 }
 
+
+
+
 #' determinconstwDT
 #'
-#' @param di  initial sampling weight : inverse of the first order inclusion probabilities
-#' @param x  variable(s) of interest
-#' @param bc  conditional bias
-#' @param tailleseq  maximum number of iterations for the research of the minimum
+#' @param pii  First order inclusion probabilities
+#' @param x  Variable(s) of interest
+#' @param bi  Conditional bias
+#' @param tailleseq  Maximum number of iterations for the research of the minimum
 #' @importFrom stats uniroot
 #' @return Computes the robust weight associated to the Dalen-Tambay winsorized estimator
 #' @export
 #'
 
-determinconstwDT = function(pii, x, bc, tailleseq=1000) {
+determinconstwDT = function(pii, x, bi, tailleseq=1000) {
+  if (max(bi) < -min(bi)) {
+    stop("The condition for existence is not satisfied.")
+  }
   di <- 1 / pii
-  functiontDT = function(a, di, x, bc){
+  functiontDT = function(a, di, x, bi){
     testpos = function(x, tconst=1.345){
       res = rep(0, length(x))
       res[(x-tconst)>0] = (x-tconst)[(x-tconst)>0]
       return(res)
     }
     rest = -colSums(((di-1)/di) * sapply(a, testpos, x=as.matrix(di*x)))
-    copt = rest + 0.5*(min(bc)+max(bc))
+    copt = rest + 0.5*(min(bi)+max(bi))
     return(copt)
   }
-  resultat <- uniroot(functiontDT, c(0, max(di*x)), check.conv=FALSE, tol=.Machine$double.eps^10, maxiter=tailleseq, trace=0, di=di, x=x, bc=bc)
+  resultat <- uniroot(functiontDT, c(0, max(di*x)), check.conv=FALSE, tol=.Machine$double.eps^10, maxiter=tailleseq, trace=0, di=di, x=x, bi=bi)
   return(resultat$root)
 }
 
