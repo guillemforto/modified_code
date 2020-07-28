@@ -26,6 +26,12 @@
   if (nrow(data) <= 1) {
     stop("your sample must contain at least 2 units\n")
   }
+  if (sum(is.na(data[,varname])) != 0) {
+    stop("at least one missing value in the interest variable(s)\n")
+  }
+  if (any(data[,varname] < 0)) {
+    warning("Warning: your interest variable(s) contain negative values\n")
+  }
   if (missing(method)) {
     warning("Warning: the method is not specified; by default, the method is si\n")
     method = "si"
@@ -77,8 +83,11 @@
   }
   if (method == "rejective") {
     gd = sum(1-pii)
-    gb = t(1/pii-1)%*%as.matrix(data[,m])/gd
-    bc = (1/pii -1) * (data[,m]-t(t(gb)%*%c(pii)))
+    gb = t(1/pii-1) %*% as.matrix(data[,m]) / gd
+    print(paste0("D: ", round(gd, 3)))
+    print(paste0("N/D: ", round(gn/gd, 3)))
+    warning("Warning: please make sure that D is large enough and N/D is bounded\n")
+    bc = (1/pii - 1) * (data[,m] - t(t(gb) %*% c(pii)))
   }
   if (remerge == T) {
     result = cbind.data.frame(data, bc)
@@ -164,6 +173,7 @@
   cgn = 0
 
   for (i in 1:nrow(x1)) {
+    print(paste("Stratum ", i, ":", sep=""))
     datastr = as.data.frame(data[(data[,ms]==i),m])
     colnames(datastr) = colnames(data)[m]
     datastr[pkey] <- c(1:nrow(datastr))
