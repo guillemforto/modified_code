@@ -27,13 +27,13 @@
     stop("your sample must contain at least 2 units\n")
   }
   if (sum(is.na(data[,varname])) != 0) {
-    stop("at least one missing value in the interest variable(s)\n")
+    stop("at least one missing value in the variable(s) of interest\n")
   }
   if (any(data[,varname] < 0)) {
-    warning("Warning: your interest variable(s) contain negative values\n")
+    warning("Warning: your variable(s) of interest contain negative values\n")
   }
-  if (missing(method)) {
-    warning("Warning: the method is not specified; by default, the method is si\n")
+  if (missing(method) | length(method) > 1) {
+    warning("Warning: the method is not specified or multiple methods are specified.\nBy default, the method is si\n")
     method = "si"
   }
   if (!(method %in% c("si", "poisson", "rejective"))) {
@@ -43,12 +43,16 @@
     stop("the vector of probabilities is missing\n")
   } else if (missing(pii) & !missing(di)) {
     pii <- 1 / di
+  } else if (!missing(pii) & !missing(di)) {
+    warning("Warning: di is redundant. Only pii is being used\n")
   }
   if (missing(gn)) {
     stop("the population size is missing\n")
   }
   if (method == "si" & !all.equal(gn, sum(1/pii))) {
-    warning("Warning: the sum of the probabilities is not equal to N\n")
+    warning("Warning: the sum of the inclusion probabilities is not equal to N\n")
+    print("N:, ", gn)
+    print("sum(1/pii):", sum(1/pii))
   }
   if (remerge==F) {
     if (missing(pkey)) {
@@ -56,13 +60,14 @@
       id <- c(1:nrow(data))
       pkey <- "id"
     } else {
-      if (!(pkey %in% colnames(data))) {
-        stop("the specified primary key is not a column name\n")
+      if (pkey != "none") {
+        if (!(pkey %in% colnames(data))) {
+          stop("the specified primary key is not a column name\n")
+        }
+        id <- data[[pkey]]
       }
-      id <- data[[pkey]]
     }
   }
-
   data = data.frame(data)
   pn = nrow(data)
   index = 1:nrow(data)
@@ -99,8 +104,10 @@
     } else {
       colnames(result) = c(paste0("condbias", colnames(bc)))
     }
-    result <- cbind.data.frame(id, result)
-    colnames(result)[1] <- pkey
+    if (pkey != "none") {
+      result <- cbind.data.frame(id, result)
+      colnames(result)[1] <- pkey
+    }
   }
   result
 }
@@ -137,6 +144,8 @@
     stop("the vector of probabilities is missing\n")
   } else if (missing(pii) & !missing(di)) {
     pii <- 1 / di
+  } else if (!missing(pii) & !missing(di)) {
+    warning("Warning: di is redundant. Only pii is being used\n")
   }
   if (missing(gnh)) {
     stop("the population size vector is missing\n")
@@ -198,6 +207,7 @@
     result <- cbind.data.frame(id, result)
     colnames(result)[1] <- pkey
   }
+  print("Done!")
   result
 }
 
@@ -215,13 +225,18 @@
 #' @export
 #'
 
-"robustest" <- function (data, varname=NULL, gn,
-                         method=c("si","poisson","rejective"), pii) {
-  if (gn != sum(1/pii)) {
-    warning("the sum of the inclusion probabilities is not equal to N\n")
+"robustest" <- function (data,
+                         varname = NULL,
+                         gn,
+                         method = c("si","poisson","rejective"),
+                         pii) {
+  if (method == "si" & !all.equal(gn, sum(1/pii))) {
+    warning("Warning: the sum of the inclusion probabilities is not equal to N\n")
+    print("N:, ", gn)
+    print("sum(1/pii):", sum(1/pii))
   }
-  if (missing(method)) {
-    warning("the method is not specified; by default, the method is si\n")
+  if (missing(method) | length(method) > 1) {
+    warning("Warning: the method is not specified or multiple methods are specified.\nBy default, the method is si\n")
     method = "si"
   }
   if (!(method %in% c("si", "poisson", "rejective")))
@@ -242,11 +257,11 @@
     stop("Missing values for some y-variables\n")
   if (length(m) == 1) {
     htestim = crossprod(data[,m],1/pii)
-    htbc = HTcondbiasest(data=data, varname = varname, gn=gn, method = method, pii=pii)[,c(seq(1+length(data),length(data)+length(varname)))]
+    htbc = HTcondbiasest(data=data, varname = varname, gn=gn, method=method, pii=pii, pkey="none")[,c(seq(1+length(data),length(data)+length(varname)))]
     result = htestim-(min(htbc)+max(htbc))/2
   } else {
     htestim = (1/pii) %*% as.matrix(data[,m])
-    htbc = HTcondbiasest(data=data, varname = varname, gn=gn, method = method, pii=pii)[,c(seq(1+length(data),length(data)+length(varname)))]
+    htbc = HTcondbiasest(data=data, varname=varname, gn=gn, method=method, pii=pii, pkey="none")[,c(seq(1+length(data),length(data)+length(varname)))]
     result = htestim-(apply(X=htbc,MARGIN = 2,min )+apply(X =htbc,MARGIN = 2,max ))/2
   }
   colnames(result) = c(paste0("RHT_", colnames(htbc)))
@@ -265,27 +280,36 @@
 #' @param method  Sampling design : si for simple random sampling, poisson, rejective
 #' @param pii  First order inclusion probabilities
 #'
-#' @return Computes the robust estimator of Beaumont and al.(2013) using the conditional bias and the minmax criterion to compute the tuning constant
+#' @return Computes the robust estimator of Beaumont and al.(2013) by stratum using the conditional bias and the minmax criterion to compute the tuning constant
 #' @export
 
-"strata_robustest" <- function(data, strataname=NULL, varname=NULL, gnh,
-                               method=c("si","poisson","rejective"), pii) {
-  if (missing(gnh))
+"strata_robustest" <- function(data,
+                               strataname = NULL,
+                               varname = NULL,
+                               gnh,
+                               method = c("si","poisson","rejective"),
+                               pii) {
+  if (missing(gnh)) {
     stop("the population size vector is missing\n")
-  if (missing(strataname) | is.null(strataname))
+  }
+  if (missing(strataname) | is.null(strataname)) {
     stop("no variable name to use for stratification has been specified\n")
+  }
   data = data.frame(data)
   index = 1:nrow(data)
   m = match(varname, colnames(data))
-  if (any(is.na(m)))
+  if (any(is.na(m))) {
     stop("the name of the variable is wrong\n")
+  }
   ms = match(strataname, colnames(data))
-  if (any(is.na(ms)))
+  if (any(is.na(ms))) {
     stop("the name of the strata is wrong\n")
+  }
   x1 = data.frame(unique(data[,ms]))
   rht = matrix(0, nrow=nrow(x1), ncol=length(m))
 
   for (i in 1:nrow(x1)) {
+    print(paste("Stratum ", i, ":", sep=""))
     datastr = as.data.frame(data[(data[,ms]==i),m])
     colnames(datastr) = colnames(data)[m]
     nh = nrow(as.data.frame(datastr))
@@ -294,6 +318,8 @@
   }
   result = cbind.data.frame(rht)
   colnames(result) = c(paste0("RHT_", colnames(datastr)))
+  rownames(result) = c(paste("Stratum", 1:nrow(x1)))
+  print("Done!")
   result
 }
 
@@ -302,19 +328,18 @@
 
 #' tuningconst
 #'
-#' @param bi  Conditional bias
-#' @param tailleseq  Maximum number of iterations for the research of the minimum
+#' @param bi  Conditional biases of the variable of interest
 #' @importFrom stats optimize
-#' @return Computes the robust weight associated to the Beaumont et al (2013) estimator
+#' @return Computes the tuning constant associated to the Beaumont et al (2013) estimator
 #' @export
 #'
 
-tuningconst = function(bi, tailleseq=1000) {
-  tuningconstBDR = function(c, bi, tailleseq=1000) {
+tuningconst = function(bi) {
+  tuningconstBDR = function(c, bi) {
     res = sapply(c, hub.psi, x=bi)
     return(abs(colSums(res-bi) + 0.5*(min(bi)+max(bi))))
   }
-  resultat <- optimize(tuningconstBDR, interval=c(min(abs(bi)),max(abs(bi))), bi=bi, maximum = FALSE, tol = .Machine$double.eps^0.9)
+  resultat <- optimize(tuningconstBDR, interval=c(min(abs(bi)), max(abs(bi))), bi=bi, maximum=FALSE, tol=.Machine$double.eps^0.9)
   return(resultat$minimum)
 }
 
@@ -332,99 +357,105 @@ tuningconst = function(bi, tailleseq=1000) {
 #' @param tailleseq  Maximum number of iterations for the research of the minimum
 #' @param remerge True/False to remerge the conditional bias with the original data set
 #'
-#' @return Computes the robust weight associated to the winsorized estimator
+#' @return Computes the robust weights associated to the winsorized estimator
 #' @export
 
-"weightswin.r"<-
-  function (data, varname = NULL, gn, method="si", pii, typewin="BHR",
-            tailleseq=10000, remerge=T) {
-    if (missing(method)) {
-      warning("the method is not specified; by default, the method is si\n")
+"weightswin.r"<- function (data,
+                           varname = NULL,
+                           gn,
+                           method="si",
+                           pii,
+                           typewin="BHR",
+                           tailleseq=10000,
+                           remerge=T) {
+  if (missing(method) | length(method) > 1) {
+      warning("Warning: the method is not specified or multiple methods are specified.\nBy default, the method is si\n")
       method = "si"
-    }
-    if (!(method %in% c("si", "poisson", "rejective")))
-      stop("the name of the method is wrong\n")
-    if (missing(typewin)) {
-      warning("the type of winsorization is not specified; by default, the method is BHR\n")
-      typewin = "BHR"
-    }
-    if (!(typewin %in% c("BHR", "standard", "DT")))
-      stop("the name of the type of winsorization  is wrong\n")
-    if (missing(pii))
-      stop("the vector of probabilities is missing\n")
-    data = data.frame(data)
-    pn = nrow(data)
-    index = 1:nrow(data)
-    m = match(varname, colnames(data))
-    if (any(is.na(m)))
-      stop("the name of the variable is wrong\n")
-    data2 = cbind.data.frame(data[, m], index)
-    colnames(data2) = c(varname, "index")
-    bc = HTcondbiasest(data, varname, gn, method, pii,remerge=F)
-    if(length(m) != ncol(bc))
-      stop("the number of conditionnal bias is different from the number of variable of study\n")
-    if (typewin == "BHR") {
-      if (length(m) == 1){
-        tc = tuningconst(bc[,1],tailleseq=tailleseq)
-        ditilde = (1/pii)-(bc[,1]-hub.psi(bc[,1],b=tc))/data[,m]
-        ditilde[is.nan(ditilde)] = 1/pii[is.nan(ditilde)]
-      } else {
-        tc = apply(bc, MARGIN = 2, tuningconst, tailleseq=tailleseq)
-        ditilde = (1/pii) - (bc-mapply(x=bc,b=tc,hub.psi))/data[,m]
-        ##Some weight might be Nan, since some data are equals to 0
-        ##Since they don't contribute to the total, an arbitrary can be add, by default the orginal weight
-        for (j in 1:length(bc)) {
-          ditilde[is.nan(ditilde[,j]),j] = 1/pii[is.nan(ditilde[,j])]
-        }
-      }
-    }
-    if (typewin == "standard") {
-      if (length(m)==1){
-        ctws = determinconstws(di=1/pii,x=data[,m],bc,tailleseq)
-        ditilde = (1/pii)*apply(cbind(data[,m],ctws*pii),MARGIN=1,min)/data[,m]
-        ditilde[is.nan(ditilde)] = 1/pii[is.nan(ditilde)]
-      } else {
-        tc = mapply(determinconstws,x=data[,m],bc=bc, MoreArgs = list(di = 1/pii,tailleseq=tailleseq))
-        df = data[,m]
-        df[data[,m] - t(c(tc)%*%t(c(pii)))>0] = t(c(tc)%*%t(c(pii)))[data[,m]-t(c(tc)%*%t(c(pii)))>0]
-        ditilde = (1/pii)*df/data[,m]
-        ##Some weight might be Nan, since some data are equals to 0
-        ##Since they don't contribute to the total, an arbitrary can be add, by default the orginal weight
-        for (j in 1:length(bc)) {
-          ditilde[is.nan(ditilde[,j]),j] = 1/pii[is.nan(ditilde[,j])]
-        }
-      }
-    }
-    if (typewin == "DT") {
-      if (length(m)==1){
-        copt = determinconstwDT(di=1/pii,x=data[,m],bc,tailleseq)
-        ditilde = 1+(1/pii-1)*apply(cbind(data[,m],copt*pii),MARGIN=1,min)/data[,m]
-        ditilde[is.nan(ditilde)] = 1/pii[is.nan(ditilde)]
-      } else {
-        tc = mapply(determinconstwDT,x=data[,m],bc=bc, MoreArgs = list(di = 1/pii,tailleseq=tailleseq))
-        df = data[,m]
-        df[data[,m] - t(c(tc)%*%t(c(pii)))>0] = t(c(tc)%*%t(c(pii)))[data[,m]-t(c(tc)%*%t(c(pii)))>0]
-        ditilde = 1+(1/pii-1)*df/data[,m]
-        ##Some weight might be Nan, since some data are equals to 0
-        ##Since they don't contribute to the total, an arbitrary can be add, by default the orginal weight
-        for (j in 1:length(bc)) {
-          ditilde[is.nan(ditilde[,j]),j] = 1/pii[is.nan(ditilde[,j])]
-        }
-      }
-    }
-    if (remerge) {
-      result = cbind.data.frame(data,ditilde)
-      colnames(result)=c(colnames(data),paste0("weights",typewin,colnames(ditilde)))
-    } else {
-      result =data.frame(ditilde)
-      if (length(m)==1) {
-        colnames(result) = c(paste0("weights",typewin))
-      } else {
-        colnames(result) = c(paste0("weights",typewin,colnames(ditilde)))
-      }
-    }
-    result
   }
+  if (!(method %in% c("si", "poisson", "rejective")))
+    stop("the name of the method is wrong\n")
+  if (missing(typewin)) {
+    warning("Warning: the type of winsorization is not specified; by default, the method is BHR\n")
+    typewin = "BHR"
+  }
+  if (!(typewin %in% c("BHR", "standard", "DT")))
+    stop("the name of the type of winsorization  is wrong\n")
+  if (missing(pii))
+    stop("the vector of probabilities is missing\n")
+  data = data.frame(data)
+  pn = nrow(data)
+  index = 1:nrow(data)
+  m = match(varname, colnames(data))
+  if (any(is.na(m)))
+    stop("the name of the variable is wrong\n")
+  data2 = cbind.data.frame(data[, m], index)
+  colnames(data2) = c(varname, "index")
+  bc = HTcondbiasest(data, varname, gn, method, pii, pkey="none", remerge=F)
+  if (length(m) != ncol(bc)) {
+    stop("the number of conditional bias is different from the number of variable of study\n")
+  }
+  if (typewin == "BHR") {
+    if (length(m) == 1){
+      tc = tuningconst(bc[,1],tailleseq=tailleseq)
+      ditilde = (1/pii)-(bc[,1]-hub.psi(bc[,1],b=tc))/data[,m]
+      ditilde[is.nan(ditilde)] = 1/pii[is.nan(ditilde)]
+    } else {
+      tc = apply(bc, MARGIN = 2, tuningconst, tailleseq=tailleseq)
+      ditilde = (1/pii) - (bc-mapply(x=bc,b=tc,hub.psi))/data[,m]
+      ##Some weight might be Nan, since some data are equals to 0
+      ##Since they don't contribute to the total, an arbitrary can be add, by default the orginal weight
+      for (j in 1:length(bc)) {
+        ditilde[is.nan(ditilde[,j]),j] = 1/pii[is.nan(ditilde[,j])]
+      }
+    }
+  }
+  if (typewin == "standard") {
+    if (length(m)==1){
+      ctws = determinconstws(pii=pii, x=data[,m], bi=bc, tailleseq)
+      ditilde = (1/pii)*apply(cbind(data[,m],ctws*pii),MARGIN=1,min)/data[,m]
+      ditilde[is.nan(ditilde)] = 1/pii[is.nan(ditilde)]
+    } else {
+      tc = mapply(determinconstws, x=data[,m], bi=bc, MoreArgs = list(pii=pii, tailleseq=tailleseq))
+      df = data[,m]
+      df[data[,m] - t(c(tc)%*%t(c(pii)))>0] = t(c(tc)%*%t(c(pii)))[data[,m]-t(c(tc)%*%t(c(pii)))>0]
+      ditilde = (1/pii)*df/data[,m]
+      ##Some weight might be Nan, since some data are equals to 0
+      ##Since they don't contribute to the total, an arbitrary can be add, by default the orginal weight
+      for (j in 1:length(bc)) {
+        ditilde[is.nan(ditilde[,j]),j] = 1/pii[is.nan(ditilde[,j])]
+      }
+    }
+  }
+  if (typewin == "DT") {
+    if (length(m)==1){
+      copt = determinconstwDT(pii=pii, x=data[,m], bi=bc, tailleseq)
+      ditilde = 1+(1/pii-1)*apply(cbind(data[,m],copt*pii),MARGIN=1,min)/data[,m]
+      ditilde[is.nan(ditilde)] = 1/pii[is.nan(ditilde)]
+    } else {
+      tc = mapply(determinconstwDT, x=data[,m], bi=bc, MoreArgs=list(pii=pii, tailleseq=tailleseq))
+      df = data[,m]
+      df[data[,m] - t(c(tc)%*%t(c(pii)))>0] = t(c(tc)%*%t(c(pii)))[data[,m]-t(c(tc)%*%t(c(pii)))>0]
+      ditilde = 1+(1/pii-1)*df/data[,m]
+      ##Some weight might be Nan, since some data are equals to 0
+      ##Since they don't contribute to the total, an arbitrary can be add, by default the orginal weight
+      for (j in 1:length(bc)) {
+        ditilde[is.nan(ditilde[,j]),j] = 1/pii[is.nan(ditilde[,j])]
+      }
+    }
+  }
+  if (remerge) {
+    result = cbind.data.frame(data,ditilde)
+    colnames(result)=c(colnames(data),paste0("weights",typewin,colnames(ditilde)))
+  } else {
+    result =data.frame(ditilde)
+    if (length(m)==1) {
+      colnames(result) = c(paste0("weights",typewin))
+    } else {
+      colnames(result) = c(paste0("weights",typewin,colnames(ditilde)))
+    }
+  }
+  result
+}
 
 
 
@@ -442,7 +473,7 @@ tuningconst = function(bi, tailleseq=1000) {
 #' @param remerge  True/False to remerge the conditional bias with the original data set
 #'
 #'
-#' @return  Returns the robust weights associated to the winsorized estimator
+#' @return Computes the robust weights associated to the winsorized estimator
 #' @export
 
 "strata_weightswin.r" <-
@@ -462,7 +493,7 @@ tuningconst = function(bi, tailleseq=1000) {
     if (any(is.na(ms)))
       stop("the name of the strata is wrong\n")
     if (missing(typewin)) {
-      warning("the type of winsorization is not specified; by default, the method is BHR\n")
+      warning("Warning: the type of winsorization is not specified; by default, the method is BHR\n")
       typewin = "BHR"
     }
     if (!(typewin %in% c("BHR", "standard", "DT")))
@@ -536,7 +567,7 @@ determinconstws = function(pii, x, bi, tailleseq) {
 #' @param bi  Conditional bias
 #' @param tailleseq  Maximum number of iterations for the research of the minimum
 #' @importFrom stats uniroot
-#' @return Computes the robust weight associated to the Dalen-Tambay winsorized estimator
+#' @return Computes the robust weights associated to the Dalen-Tambay winsorized estimator
 #' @export
 #'
 
@@ -558,7 +589,6 @@ determinconstwDT = function(pii, x, bi, tailleseq=1000) {
   resultat <- uniroot(functiontDT, c(0, max(di*x)), check.conv=FALSE, tol=.Machine$double.eps^10, maxiter=tailleseq, trace=0, di=di, x=x, bi=bi)
   return(resultat$root)
 }
-
 
 
 
