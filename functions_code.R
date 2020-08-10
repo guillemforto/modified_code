@@ -1,5 +1,5 @@
 
-#' General
+#' wrapper
 #' The main wrapper function
 #' @param data  Original data set with the sample, the variable(s) of interest
 #' @param varname  Name(s) of the variable(s) of interest
@@ -8,44 +8,72 @@
 #' @param pii  First order inclusion probabilities
 #' @param esttype  Type of estimator
 #' 
-#' @return Returns a 
+#' @return Returns two dataframes: the first one acts as a summarizer of the winsorisation and gives the robust estimators. The second one details all the weights changes of every unit.
 #' @export
 #' 
 
-# "wrapper" <- function(data,
-#                       varname = NULL,
-#                       gn,
-#                       type = c("BHR", "standard", "Dalen-Tambay"),
-#                       method = c("si", "poisson", "rejective"),
-#                       pii = NULL) {
-#   apply
-#   if (method == "si") & (Bmax < -Bmin) {
-#     warning("Warning: the winsorised constant associated to the robust estimator may not be unique.")
-#   } else if (method == "rejective") {
-#     warning("Warning: the winsorised constant associated to the robust estimator may not be unique.")
-#   }
-#   df <- data.frame(type=character(),
-#                    var=character(), 
-#                    RHT=numeric(), 
-#                    tuning_const=numeric(),
-#                    HT=numeric(),
-#                    rel_diff=numeric(),
-#                    modif_weights=integer(),
-#                    stringsAsFactors=FALSE)
-#   
-#   for (var in varname) {
-#     bi <- HTcondbiasest(data, var, gn, method, pii, id="none", remerge = FALSE)
-#     RHT <- robustest(data, var, gn, method, pii)[[1]]
-#     tun_const <- tuningconst(bi$condbias)
-#     HT <- HTestimator(data[,var], pii)[[1]]
-#     rel_diff <- round((RHT - HT) / HT * 100, 2)
-#     
-#     df <- rbind(df, list(type, var, RHT, tun_const, HT, rel_diff, 0))
-#   }
-#   
-#   colnames(df) <- c("type", "var", "RHT", "tuning_const", "HT", "rel_diff", "modif_weights")
-#   df
-# }
+"wrapper" <- function(data,
+                      varname = NULL,
+                      gn,
+                      est_type = c("BHR", "standard", "Dalen-Tambay"),
+                      method = c("si", "poisson", "rejective"),
+                      pii = NULL) {
+  
+  df <- data.frame(est_type=character(),
+                   var=character(),
+                   RHT=numeric(),
+                   tuning_const=numeric(),
+                   HT=numeric(),
+                   rel_diff=numeric(),
+                   modif_weights=integer())
+  
+  df2 <- data.frame(matrix(0, ncol=0, nrow=nrow(data)))
+  # data.frame(init_weight=numeric(),
+  #                   bi=numeric(),
+  #                   modified=logical(),
+  #                   new_weight=numeric())
+  df2$init_weight <- 1/pii
+  
+  for (var in varname) {
+    # conditional bias
+    bi <- HTcondbiasest(data, var, gn, method, pii, id="none", remerge=FALSE)
+    # robust estimator
+    RHT <- robustest(data, var, gn, method, pii)[[1]]
+    
+    df2[,paste0("condbias", var)] <- bi$condbias
+    
+    for (t in est_type) {
+      # tuning constant
+      if (t == "BHR") {
+        tun_const <- tuningconst(bi$condbias)
+        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin="BHR", tailleseq=1000000, remerge=F)[,]
+      } else if (t == "standard") {
+        tun_const <- determinconstws(pii, data[,var], bi$condbias, tailleseq=1000000)
+        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin="standard", tailleseq=1000000, remerge=F)[,]
+      } else if (t == "Dalen-Tambay") {
+        tun_const <- determinconstwDT(pii, data[,var], bi$condbias, tailleseq=1000000)
+        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin="DT", tailleseq=1000000, remerge=F)[,]
+      }
+      # HT estimator + relative difference + nb_modif_weights
+      HT <- crossprod(data[,var], 1/pii)
+      rel_diff <- round((RHT - HT) / HT * 100, 2)
+      modif_weights <- diag(outer(1/pii, new_weights, Vectorize(all.equal)))
+      modif_weights[modif_weights != TRUE] <- FALSE
+      modif_weights <- !as.logical(modif_weights)
+      nb_modif_weights <- sum(modif_weights)
+      
+      # filling df
+      df <- rbind(df, list(t, var, RHT, tun_const, HT, rel_diff, nb_modif_weights), stringsAsFactors=FALSE)
+      
+      # filling df2
+      df2[,paste0("new_weights", var, t)] <- new_weights
+      df2[,paste0("modifed", var, t)] <- modif_weights
+    }
+  }
+  colnames(df) <- c("est_type", "var", "RHT", "tuning_const", "HT", "rel_diff", "nb_modif_weights")
+  
+  return(list(df, df2))
+}
 
 
 #' HTcondbiasest
@@ -63,7 +91,7 @@
 #' @export
 #'
 
-"HTcondbiasest" <- function (data,
+"condbiasest" <- function (data,
                              varname = NULL,
                              gn,
                              method = c("si", "poisson", "rejective"),
