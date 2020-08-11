@@ -4,11 +4,11 @@
 #' @param data  Original data set with the sample, the variable(s) of interest
 #' @param varname  Name(s) of the variable(s) of interest
 #' @param gn  Population size
-#' @param method  Sampling design : si for simple random sampling, poisson, rejective
+#' @param method  Sampling design: si for simple random sampling, poisson, rejective
 #' @param pii  First order inclusion probabilities
 #' @param esttype  Type of estimator
 #' 
-#' @return Returns two dataframes: the first one acts as a summarizer of the winsorisation and gives the robust estimators. The second one details all the weights changes of every unit.
+#' @return Returns two dataframes: the first one gives the robust estimator and acts as a summary of the winsorisation. The second one details the weight changes of every unit.
 #' @export
 #' 
 
@@ -17,7 +17,27 @@
                       gn,
                       est_type = c("BHR", "standard", "Dalen-Tambay"),
                       method = c("si", "poisson", "rejective"),
-                      pii = NULL) {
+                      pii = NULL,
+                      di = NULL,
+                      id = NULL) {
+  # Conditions
+  if (missing(pii) & missing(di)) {
+    stop("the vector of probabilities is missing\n")
+  } else if (missing(pii) & !missing(di)) {
+    pii <- 1 / di
+  } else if (!missing(pii) & !missing(di)) {
+    warning("Warning: di is redundant. Only pii is being used\n")
+  }
+  if (missing(id)) {
+    warning("Warning: no column is specified as an identifier, one is added automatically (id)\n")
+    id <- "id"
+    identifier <- c(1:nrow(data))
+  } else {
+    if (!(id %in% colnames(data))) {
+      stop("the specified identifier is not a column name\n")
+    }
+    identifier <- data[[id]]
+  }
   
   df <- data.frame(est_type=character(),
                    var=character(),
@@ -28,10 +48,7 @@
                    modif_weights=integer())
   
   df2 <- data.frame(matrix(0, ncol=0, nrow=nrow(data)))
-  # data.frame(init_weight=numeric(),
-  #                   bi=numeric(),
-  #                   modified=logical(),
-  #                   new_weight=numeric())
+  df2[,id] <- identifier
   df2$init_weight <- 1/pii
   
   for (var in varname) {
@@ -40,19 +57,21 @@
     # robust estimator
     RHT <- robustest(data, var, gn, method, pii)[[1]]
     
-    df2[,paste0("condbias", var)] <- bi$condbias
+    # filling df2
+    df2[,var] <- data[,var]
+    df2[,paste("condbias", var, sep="_")] <- bi$condbias
     
     for (t in est_type) {
       # tuning constant
       if (t == "BHR") {
         tun_const <- tuningconst(bi$condbias)
-        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin="BHR", tailleseq=1000000, remerge=F)[,]
+        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin="BHR", maxit=1000000, remerge=F)[,]
       } else if (t == "standard") {
-        tun_const <- determinconstws(pii, data[,var], bi$condbias, tailleseq=1000000)
-        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin="standard", tailleseq=1000000, remerge=F)[,]
+        tun_const <- determinconstws(pii, data[,var], bi$condbias, maxit=1000000)
+        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin="standard", maxit=1000000, remerge=F)[,]
       } else if (t == "Dalen-Tambay") {
-        tun_const <- determinconstwDT(pii, data[,var], bi$condbias, tailleseq=1000000)
-        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin="DT", tailleseq=1000000, remerge=F)[,]
+        tun_const <- determinconstwDT(pii, data[,var], bi$condbias, maxit=1000000)
+        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin="DT", maxit=1000000, remerge=F)[,]
       }
       # HT estimator + relative difference + nb_modif_weights
       HT <- crossprod(data[,var], 1/pii)
@@ -66,8 +85,8 @@
       df <- rbind(df, list(t, var, RHT, tun_const, HT, rel_diff, nb_modif_weights), stringsAsFactors=FALSE)
       
       # filling df2
-      df2[,paste0("new_weights", var, t)] <- new_weights
-      df2[,paste0("modifed", var, t)] <- modif_weights
+      df2[,paste("new_weights", var, t, sep="_")] <- new_weights
+      df2[,paste("modifed", var, t, sep="_")] <- modif_weights
     }
   }
   colnames(df) <- c("est_type", "var", "RHT", "tuning_const", "HT", "rel_diff", "nb_modif_weights")
@@ -91,7 +110,7 @@
 #' @export
 #'
 
-"condbiasest" <- function (data,
+"HTcondbiasest" <- function (data,
                              varname = NULL,
                              gn,
                              method = c("si", "poisson", "rejective"),
@@ -144,6 +163,7 @@
       }
     }
   }
+  
   data = data.frame(data)
   pn = nrow(data)
   index = 1:nrow(data)
@@ -161,7 +181,7 @@
     }
   }
   if (method == "poisson") {
-    bc = (1/pii -1) * data[,m]
+    bc = (1/pii-1) * data[,m]
   }
   if (method == "rejective") {
     gd = sum(1-pii)
@@ -333,7 +353,7 @@
   if (length(m) == 1) {
     htestim = crossprod(data[,m],1/pii)
     htbc = HTcondbiasest(data=data, varname = varname, gn=gn, method=method, pii=pii, id="none")[,c(seq(1+length(data),length(data)+length(varname)))]
-    result = htestim-(min(htbc)+max(htbc))/2
+    result = htestim - (min(htbc)+max(htbc))/2
   } else {
     htestim = (1/pii) %*% as.matrix(data[,m])
     htbc = HTcondbiasest(data=data, varname=varname, gn=gn, method=method, pii=pii, id="none")[,c(seq(1+length(data),length(data)+length(varname)))]
@@ -427,7 +447,7 @@ tuningconst = function(bi) {
 #' @param method  Sampling design : si for simple random sampling, poisson, rejective
 #' @param pii  First order inclusion probabilities
 #' @param typewin  Winsorized estimator : Beaumont et al., Standard or Dalen-Tambay
-#' @param tailleseq  Maximum number of iterations for the research of the minimum
+#' @param maxit  Maximum number of iterations for the research of the minimum
 #' @param remerge True/False to remerge the conditional bias with the original data set
 #'
 #' @return Computes the robust weights associated to the winsorized estimator
@@ -439,7 +459,7 @@ tuningconst = function(bi) {
                               method = "si", 
                               pii, 
                               typewin = "BHR",
-                              tailleseq = 10000, 
+                              maxit = 10000, 
                               remerge = T) {
   if (missing(method) | length(method) > 1) {
       warning("Warning: the method is not specified or multiple methods are specified.\nBy default, the method is 'si'\n")
@@ -488,11 +508,11 @@ tuningconst = function(bi) {
   }
   if (typewin == "standard") {
     if (length(m)==1){
-      ctws = determinconstws(pii=pii, x=data[,m], bi=bc, tailleseq)
+      ctws = determinconstws(pii=pii, x=data[,m], bi=bc, maxit)
       ditilde = (1/pii)*apply(cbind(data[,m],ctws*pii),MARGIN=1,min)/data[,m]
       ditilde[is.nan(ditilde)] = 1/pii[is.nan(ditilde)]
     } else {
-      tc = mapply(determinconstws, x=data[,m], bi=bc, MoreArgs = list(pii=pii, tailleseq=tailleseq))
+      tc = mapply(determinconstws, x=data[,m], bi=bc, MoreArgs = list(pii=pii, maxit=maxit))
       df = data[,m]
       df[data[,m] - t(c(tc)%*%t(c(pii)))>0] = t(c(tc)%*%t(c(pii)))[data[,m]-t(c(tc)%*%t(c(pii)))>0]
       ditilde = (1/pii)*df/data[,m]
@@ -505,11 +525,11 @@ tuningconst = function(bi) {
   }
   if (typewin == "DT") {
     if (length(m)==1){
-      copt = determinconstwDT(pii=pii, x=data[,m], bi=bc, tailleseq)
+      copt = determinconstwDT(pii=pii, x=data[,m], bi=bc, maxit)
       ditilde = 1+(1/pii-1)*apply(cbind(data[,m],copt*pii),MARGIN=1,min)/data[,m]
       ditilde[is.nan(ditilde)] = 1/pii[is.nan(ditilde)]
     } else {
-      tc = mapply(determinconstwDT, x=data[,m], bi=bc, MoreArgs=list(pii=pii, tailleseq=tailleseq))
+      tc = mapply(determinconstwDT, x=data[,m], bi=bc, MoreArgs=list(pii=pii, maxit=maxit))
       df = data[,m]
       df[data[,m] - t(c(tc)%*%t(c(pii)))>0] = t(c(tc)%*%t(c(pii)))[data[,m]-t(c(tc)%*%t(c(pii)))>0]
       ditilde = 1+(1/pii-1)*df/data[,m]
@@ -546,7 +566,7 @@ tuningconst = function(bi) {
 #' @param method  Sampling design : si for simple random sampling, poisson, rejective
 #' @param pii  First order inclusion probabilities
 #' @param typewin  Winsorized estimator : Beaumont et al., Standard or Dalen-Tambay
-#' @param tailleseq  Maximum number of iterations for the research of the minimum
+#' @param maxit  Maximum number of iterations for the research of the minimum
 #' @param remerge  True/False to remerge the conditional bias with the original data set
 #'
 #'
@@ -560,7 +580,7 @@ tuningconst = function(bi) {
                                       method = c("si", "poisson", "rejective"), 
                                       pii,
                                       typewin = "BHR",
-                                      tailleseq = 10000,
+                                      maxit = 10000,
                                       remerge = T) {
   if (missing(gnh)) {
     stop("the population size vector is missing\n")
@@ -593,7 +613,7 @@ tuningconst = function(bi) {
     colnames(datastr) = colnames(data)[m]
     nh = nrow(as.data.frame(datastr))
     piisrt = pii[(data[,ms]==i)]
-    resint = robustweights.r(data=datastr, varname=varname, gn=gnh[i], method=method , pii=piisrt, typewin=typewin, tailleseq=tailleseq, remerge=F)
+    resint = robustweights.r(data=datastr, varname=varname, gn=gnh[i], method=method , pii=piisrt, typewin=typewin, maxit=maxit, remerge=F)
     matw[(cgn+1):(cgn+nh),] = as.matrix(resint)
     # bc[(cgn+1):(cgn+nh)]=nh[i]/(nh[i]-1)*(gnh[i]/nh-1)*(y-mean(y))
     cgn=cgn+nh
@@ -617,13 +637,13 @@ tuningconst = function(bi) {
 #' @param pii  First order inclusion probabilities
 #' @param x  Variable(s) of interest
 #' @param bi  Conditional bias
-#' @param tailleseq  Maximum number of iterations for the research of the minimum
+#' @param maxit  Maximum number of iterations for the research of the minimum
 #' @importFrom stats uniroot
 #' @return Computes the robust weights associated to the standard winsorized estimator
 #' @export
 #'
 
-determinconstws = function(pii, x, bi, tailleseq) {
+determinconstws = function(pii, x, bi, maxit=10000) {
   if (max(bi) < -min(bi)) {
     stop("the condition for unicity is not satisfied\n")
   }
@@ -638,7 +658,7 @@ determinconstws = function(pii, x, bi, tailleseq) {
     copt = rest + 0.5*(min(bi)+max(bi))
     return(copt)
   }
-  resultat <- uniroot(functiontws, c(0,max(di*x)), check.conv=FALSE, tol=.Machine$double.eps^10, maxiter=tailleseq, trace=0, di=di, x=x, bi=bi)
+  resultat <- uniroot(functiontws, c(0,max(di*x)), check.conv=FALSE, tol=.Machine$double.eps^10, maxiter=maxit, trace=0, di=di, x=x, bi=bi)
   return(resultat$root)
 }
 
@@ -650,13 +670,13 @@ determinconstws = function(pii, x, bi, tailleseq) {
 #' @param pii  First order inclusion probabilities
 #' @param x  Variable(s) of interest
 #' @param bi  Conditional bias
-#' @param tailleseq  Maximum number of iterations for the research of the minimum
+#' @param maxit  Maximum number of iterations for the research of the minimum
 #' @importFrom stats uniroot
 #' @return Computes the robust weights associated to the Dalen-Tambay winsorized estimator
 #' @export
 #'
 
-determinconstwDT = function(pii, x, bi, tailleseq=1000) {
+determinconstwDT = function(pii, x, bi, maxit=10000) {
   if (max(bi) < -min(bi)) {
     stop("the condition for unicity is not satisfied\n")
   }
@@ -671,7 +691,7 @@ determinconstwDT = function(pii, x, bi, tailleseq=1000) {
     copt = rest + 0.5*(min(bi)+max(bi))
     return(copt)
   }
-  resultat <- uniroot(functiontDT, c(0, max(di*x)), check.conv=FALSE, tol=.Machine$double.eps^10, maxiter=tailleseq, trace=0, di=di, x=x, bi=bi)
+  resultat <- uniroot(functiontDT, c(0, max(di*x)), check.conv=FALSE, tol=.Machine$double.eps^10, maxiter=maxit, trace=0, di=di, x=x, bi=bi)
   return(resultat$root)
 }
 
@@ -679,6 +699,8 @@ determinconstwDT = function(pii, x, bi, tailleseq=1000) {
 
 hub.psi <- function(x, b = 1.345) {
   psi <- ifelse(abs(x) <= b, x, sign(x) * b)
-  der.psi <- ifelse(abs(x) <= b, 1, 0)
   return(psi = psi)
 }
+
+
+
