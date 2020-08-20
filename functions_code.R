@@ -2,8 +2,10 @@
 #' wrapper
 #' The main wrapper function
 #' @param data  Original data set with the sample, the variable(s) of interest
+#' @param strataname  Name of the variable to use for stratification
 #' @param varname  Name(s) of the variable(s) of interest
 #' @param gn  Population size
+#' @param gnh  Population size in each stratum
 #' @param method  Sampling design: si for simple random sampling, poisson, rejective
 #' @param pii  First order inclusion probabilities
 #' @param esttype  Type of estimator
@@ -14,8 +16,10 @@
 
 "wrapper" <- function(data,
                       varname = NULL,
+                      strataname = NULL,
                       gn,
-                      est_type = c("BHR", "standard", "Dalen-Tambay"),
+                      gnh = NULL,
+                      est_type = c("BHR", "standard", "DT"),
                       method = c("si", "poisson", "rejective"),
                       pii = NULL,
                       di = NULL,
@@ -39,23 +43,44 @@
     identifier <- data[[id]]
   }
   
-  df <- data.frame(est_type=character(),
-                   var=character(),
-                   RHT=numeric(),
-                   tuning_const=numeric(),
-                   HT=numeric(),
-                   rel_diff=numeric(),
-                   modif_weights=integer())
+  if (!missing(strataname) & !missing(gnh)) {
+    df <- data.frame(strata=numeric(),
+                     est_type=character(),
+                     var=character(),
+                     RHT=numeric(),
+                     tuning_const=numeric(),
+                     HT=numeric(),
+                     rel_diff=numeric(),
+                     modif_weights=integer())
+  } else {
+    df <- data.frame(est_type=character(),
+                     var=character(),
+                     RHT=numeric(),
+                     tuning_const=numeric(),
+                     HT=numeric(),
+                     rel_diff=numeric(),
+                     modif_weights=integer())
+  }
   
   df2 <- data.frame(matrix(0, ncol=0, nrow=nrow(data)))
   df2[,id] <- identifier
   df2$init_weight <- 1/pii
+  if (!missing(strataname) & !missing(gnh)) {
+    df2$strata <- data[,strataname]
+  }
   
   for (var in varname) {
-    # conditional bias
-    bi <- HTcondbiasest(data, var, gn, method, pii, id="none", remerge=FALSE)
-    # robust estimator
-    RHT <- robustest(data, var, gn, method, pii)[[1]]
+    if (!missing(strataname) & !missing(gnh)) {
+      # conditional bias
+      bi <- strata_HTcondbiasest(data, strataname, var, gnh, method, pii, remerge=FALSE)
+      # robust estimator
+      RHT <- strata_robustest(data, strataname, var, gnh, method, pii)[[1]]
+    } else {
+      # conditional bias
+      bi <- HTcondbiasest(data, var, gn, method, pii, id="none", remerge=FALSE)
+      # robust estimator
+      RHT <- robustest(data, var, gn, method, pii)[[1]]
+    }
     
     # filling df2
     df2[,var] <- data[,var]
@@ -65,16 +90,28 @@
       # tuning constant
       if (t == "BHR") {
         tun_const <- tuningconst(bi$condbias)
-        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin="BHR", maxit=1000000, remerge=F)[,]
       } else if (t == "standard") {
-        tun_const <- determinconstws(pii, data[,var], bi$condbias, maxit=1000000)
-        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin="standard", maxit=1000000, remerge=F)[,]
-      } else if (t == "Dalen-Tambay") {
-        tun_const <- determinconstwDT(pii, data[,var], bi$condbias, maxit=1000000)
-        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin="DT", maxit=1000000, remerge=F)[,]
+        tun_const <- determinconstws(pii, data[,var], bi$condbias)
+      } else if (t == "DT") {
+        tun_const <- determinconstwDT(pii, data[,var], bi$condbias)
       }
-      # HT estimator + relative difference + nb_modif_weights
-      HT <- crossprod(data[,var], 1/pii)
+      # weights
+      if (!missing(strataname) & !missing(gnh)) {
+        new_weights <- strata_robustweights.r(data, strataname, var, gnh, method, pii, typewin=t, remerge=F)[,]
+      } else {
+        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin=t, remerge=F)[,]
+      }
+      # HT estimator
+      if (!missing(strataname) & !missing(gnh)) {
+        HT <- c()
+        for (i in unique(data[,strataname])) {
+          HT[i] <- crossprod(data[data[,strataname]==i, var], 1/pii[data[,strataname]==i])
+        }
+      } else {
+        HT <- crossprod(data[,var], 1/pii)
+      }
+      
+      # relative difference + nb_modif_weights
       rel_diff <- round((RHT - HT) / HT * 100, 2)
       modif_weights <- diag(outer(1/pii, new_weights, Vectorize(all.equal)))
       modif_weights[modif_weights != TRUE] <- FALSE
@@ -82,14 +119,24 @@
       nb_modif_weights <- sum(modif_weights)
       
       # filling df
-      df <- rbind(df, list(t, var, RHT, tun_const, HT, rel_diff, nb_modif_weights), stringsAsFactors=FALSE)
+      if (!missing(strataname) & !missing(gnh)) {
+        for (i in unique(data[,strataname])) {
+          df <- rbind(df, list(i, t, var, RHT[i], tun_const, HT[i], rel_diff[i], nb_modif_weights), stringsAsFactors=FALSE)
+        }
+      } else {
+        df <- rbind(df, list(t, var, RHT, tun_const, HT, rel_diff, nb_modif_weights), stringsAsFactors=FALSE)
+      }
       
       # filling df2
       df2[,paste("new_weights", var, t, sep="_")] <- new_weights
       df2[,paste("modifed", var, t, sep="_")] <- modif_weights
     }
   }
-  colnames(df) <- c("est_type", "var", "RHT", "tuning_const", "HT", "rel_diff", "nb_modif_weights")
+  if (!missing(strataname) & !missing(gnh)) {
+    colnames(df) <- c("strata", "est_type", "var", "RHT", "tuning_const", "HT", "rel_diff", "nb_modif_weights")
+  } else {
+    colnames(df) <- c("est_type", "var", "RHT", "tuning_const", "HT", "rel_diff", "nb_modif_weights")
+  }
   
   return(list(df, df2))
 }
@@ -217,7 +264,7 @@
 #' @param data  Original data set with the sample, the variable(s) of interest
 #' @param strataname  Name of the variable to use for stratification
 #' @param varname  Name(s) of the variable(s) of interest
-#' @param gnh  Lopulation size in each stratum
+#' @param gnh  Population size in each stratum
 #' @param method  Sampling design : si for simple random sampling, poisson, rejective
 #' @param pii  First order inclusion probabilities
 #' @param di  Inverse of the first order inclusion probabilities
