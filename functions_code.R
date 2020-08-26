@@ -43,8 +43,9 @@
     identifier <- data[[id]]
   }
   
+  # initialisation data frames
   if (!missing(strataname) & !missing(gnh)) {
-    df <- data.frame(strata=numeric(),
+    df <- data.frame(stratum=numeric(),
                      est_type=character(),
                      var=character(),
                      RHT=numeric(),
@@ -66,7 +67,7 @@
   df2[,id] <- identifier
   df2$init_weight <- 1/pii
   if (!missing(strataname) & !missing(gnh)) {
-    df2$strata <- data[,strataname]
+    df2$stratum <- data[,strataname]
   }
   
   for (var in varname) {
@@ -111,17 +112,21 @@
         HT <- crossprod(data[,var], 1/pii)
       }
       
-      # relative difference + nb_modif_weights
+      # relative difference + modif_weights + nb_modif_weights
       rel_diff <- round((RHT - HT) / HT * 100, 2)
       modif_weights <- diag(outer(1/pii, new_weights, Vectorize(all.equal)))
       modif_weights[modif_weights != TRUE] <- FALSE
       modif_weights <- !as.logical(modif_weights)
-      nb_modif_weights <- sum(modif_weights)
+      if (!missing(strataname) & !missing(gnh)) {
+        nb_modif_weights <- as.vector(table(modif_weights, data[,strataname])["TRUE",])
+      } else {
+        nb_modif_weights <- sum(modif_weights)
+      }
       
       # filling df
       if (!missing(strataname) & !missing(gnh)) {
         for (i in unique(data[,strataname])) {
-          df <- rbind(df, list(i, t, var, RHT[i], tun_const, HT[i], rel_diff[i], nb_modif_weights), stringsAsFactors=FALSE)
+          df <- rbind(df, list(i, t, var, RHT[i], tun_const, HT[i], rel_diff[i], nb_modif_weights[i]), stringsAsFactors=FALSE)
         }
       } else {
         df <- rbind(df, list(t, var, RHT, tun_const, HT, rel_diff, nb_modif_weights), stringsAsFactors=FALSE)
@@ -133,7 +138,7 @@
     }
   }
   if (!missing(strataname) & !missing(gnh)) {
-    colnames(df) <- c("strata", "est_type", "var", "RHT", "tuning_const", "HT", "rel_diff", "nb_modif_weights")
+    colnames(df) <- c("stratum", "est_type", "var", "RHT", "tuning_const", "HT", "rel_diff", "nb_modif_weights")
   } else {
     colnames(df) <- c("est_type", "var", "RHT", "tuning_const", "HT", "rel_diff", "nb_modif_weights")
   }
@@ -501,12 +506,12 @@ tuningconst = function(bi) {
 #' @export
 
 "robustweights.r"<- function (data, 
-                              varname = NULL, 
-                              gn, 
-                              method = "si", 
-                              pii, 
+                              varname = NULL,
+                              gn,
+                              method = "si",
+                              pii,
                               typewin = "BHR",
-                              maxit = 10000, 
+                              maxit = 10000,
                               remerge = T) {
   if (missing(method) | length(method) > 1) {
       warning("Warning: the method is not specified or multiple methods are specified.\nBy default, the method is 'si'\n")
@@ -541,7 +546,7 @@ tuningconst = function(bi) {
   if (typewin == "BHR") {
     if (length(m) == 1){
       tc = tuningconst(bc[,1])
-      ditilde = (1/pii)-(bc[,1]-hub.psi(bc[,1],b=tc))/data[,m]
+      ditilde = (1/pii) - (bc[,1]-hub.psi(bc[,1],b=tc))/data[,m]
       ditilde[is.nan(ditilde)] = 1/pii[is.nan(ditilde)]
     } else {
       tc = apply(bc, MARGIN = 2, tuningconst)
@@ -556,7 +561,7 @@ tuningconst = function(bi) {
   if (typewin == "standard") {
     if (length(m)==1){
       ctws = determinconstws(pii=pii, x=data[,m], bi=bc, maxit)
-      ditilde = (1/pii)*apply(cbind(data[,m],ctws*pii),MARGIN=1,min)/data[,m]
+      ditilde = (1/pii) * apply(cbind(data[,m],ctws*pii),MARGIN=1,min)/data[,m]
       ditilde[is.nan(ditilde)] = 1/pii[is.nan(ditilde)]
     } else {
       tc = mapply(determinconstws, x=data[,m], bi=bc, MoreArgs = list(pii=pii, maxit=maxit))
@@ -573,7 +578,7 @@ tuningconst = function(bi) {
   if (typewin == "DT") {
     if (length(m)==1){
       copt = determinconstwDT(pii=pii, x=data[,m], bi=bc, maxit)
-      ditilde = 1+(1/pii-1)*apply(cbind(data[,m],copt*pii),MARGIN=1,min)/data[,m]
+      ditilde = 1+(1/pii-1) * apply(cbind(data[,m],copt*pii),MARGIN=1,min)/data[,m]
       ditilde[is.nan(ditilde)] = 1/pii[is.nan(ditilde)]
     } else {
       tc = mapply(determinconstwDT, x=data[,m], bi=bc, MoreArgs=list(pii=pii, maxit=maxit))
@@ -686,7 +691,7 @@ tuningconst = function(bi) {
 #' @param bi  Conditional bias
 #' @param maxit  Maximum number of iterations for the research of the minimum
 #' @importFrom stats uniroot
-#' @return Computes the robust weights associated to the standard winsorized estimator
+#' @return Computes the winsorisation constant associated to the standard winsorized estimator
 #' @export
 #'
 
@@ -719,7 +724,7 @@ determinconstws = function(pii, x, bi, maxit=10000) {
 #' @param bi  Conditional bias
 #' @param maxit  Maximum number of iterations for the research of the minimum
 #' @importFrom stats uniroot
-#' @return Computes the robust weights associated to the Dalen-Tambay winsorized estimator
+#' @return Computes the winsorisation constant associated to the Dalen-Tambay winsorized estimator
 #' @export
 #'
 
