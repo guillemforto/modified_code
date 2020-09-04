@@ -9,10 +9,10 @@
 #' @param method  Sampling design: si for simple random sampling, poisson, rejective
 #' @param pii  First order inclusion probabilities
 #' @param esttype  Type of estimator
-#' 
+#'
 #' @return Returns two dataframes: the first one gives the robust estimator and acts as a summary of the winsorisation. The second one details the weight changes of every unit.
 #' @export
-#' 
+#'
 
 "wrapper" <- function(data,
                       varname = NULL,
@@ -42,8 +42,8 @@
     }
     identifier <- data[[id]]
   }
-  
-  # initialisation data frames
+
+  # initialisation data frames (df=summary / df2=detailed)
   if (!missing(strataname) & !missing(gnh)) {
     df <- data.frame(stratum=numeric(),
                      est_type=character(),
@@ -62,14 +62,14 @@
                      rel_diff=numeric(),
                      modif_weights=integer())
   }
-  
+
   df2 <- data.frame(matrix(0, ncol=0, nrow=nrow(data)))
   df2[,id] <- identifier
   df2$init_weight <- 1/pii
   if (!missing(strataname) & !missing(gnh)) {
     df2$stratum <- data[,strataname]
   }
-  
+
   for (var in varname) {
     if (!missing(strataname) & !missing(gnh)) {
       # conditional bias
@@ -82,11 +82,11 @@
       # robust estimator
       RHT <- robustest(data, var, gn, method, pii)[[1]]
     }
-    
+
     # filling df2
     df2[,var] <- data[,var]
     df2[,paste("condbias", var, sep="_")] <- bi$condbias
-    
+
     for (t in est_type) {
       # tuning constant
       if (t == "BHR") {
@@ -111,7 +111,7 @@
       } else {
         HT <- crossprod(data[,var], 1/pii)
       }
-      
+
       # relative difference + modif_weights + nb_modif_weights
       rel_diff <- round((RHT - HT) / HT * 100, 2)
       modif_weights <- diag(outer(1/pii, new_weights, Vectorize(all.equal)))
@@ -122,16 +122,18 @@
       } else {
         nb_modif_weights <- sum(modif_weights)
       }
-      
+
       # filling df
       if (!missing(strataname) & !missing(gnh)) {
         for (i in unique(data[,strataname])) {
           df <- rbind(df, list(i, t, var, RHT[i], tun_const, HT[i], rel_diff[i], nb_modif_weights[i]), stringsAsFactors=FALSE)
         }
+        # row of totals
+        df <- rbind(df, list("TOTAL", t, var, sum(RHT), NA, sum(HT), round((sum(RHT) - sum(HT)) / sum(HT) * 100, 2), sum(nb_modif_weights)), stringsAsFactors=FALSE)
       } else {
         df <- rbind(df, list(t, var, RHT, tun_const, HT, rel_diff, nb_modif_weights), stringsAsFactors=FALSE)
       }
-      
+
       # filling df2
       df2[,paste("new_weights", var, t, sep="_")] <- new_weights
       df2[,paste("modifed", var, t, sep="_")] <- modif_weights
@@ -142,7 +144,7 @@
   } else {
     colnames(df) <- c("est_type", "var", "RHT", "tuning_const", "HT", "rel_diff", "nb_modif_weights")
   }
-  
+
   return(list(df, df2))
 }
 
@@ -196,7 +198,7 @@
   if (missing(gn)) {
     stop("the population size is missing\n")
   }
-  if (method == "si" & !all.equal(gn, sum(1/pii))) {
+  if (method == "si" & !isTRUE(all.equal(gn, sum(1/pii)))) {
     warning("Warning: the sum of the inclusion probabilities is not equal to N\n")
     print("N:, ", gn)
     print("sum(1/pii):", sum(1/pii))
@@ -215,7 +217,7 @@
       }
     }
   }
-  
+
   data = data.frame(data)
   pn = nrow(data)
   index = 1:nrow(data)
@@ -372,12 +374,12 @@
 #' @export
 #'
 
-"robustest" <- function (data, 
-                         varname = NULL, 
+"robustest" <- function (data,
+                         varname = NULL,
                          gn,
-                         method = c("si","poisson","rejective"), 
+                         method = c("si","poisson","rejective"),
                          pii) {
-  if (method == "si" & !all.equal(gn, sum(1/pii))) {
+  if (method == "si" & !isTRUE(all.equal(gn, sum(1/pii)))) {
     warning("Warning: the sum of the inclusion probabilities is not equal to N\n")
     print("N:, ", gn)
     print("sum(1/pii):", sum(1/pii))
@@ -430,11 +432,11 @@
 #' @return Computes the robust estimator of Beaumont et al.(2013) by stratum using the conditional bias and the minmax criterion to compute the tuning constant
 #' @export
 
-"strata_robustest" <- function(data, 
-                               strataname = NULL, 
-                               varname = NULL, 
+"strata_robustest" <- function(data,
+                               strataname = NULL,
+                               varname = NULL,
                                gnh,
-                               method = c("si","poisson","rejective"), 
+                               method = c("si","poisson","rejective"),
                                pii) {
   if (missing(gnh)) {
     stop("the population size vector is missing\n")
@@ -505,7 +507,7 @@ tuningconst = function(bi) {
 #' @return Computes the robust weights associated to the winsorized estimator
 #' @export
 
-"robustweights.r"<- function (data, 
+"robustweights.r"<- function (data,
                               varname = NULL,
                               gn,
                               method = "si",
@@ -625,11 +627,11 @@ tuningconst = function(bi) {
 #' @return Computes the robust weights associated to the winsorized estimator
 #' @export
 
-"strata_robustweights.r" <- function (data, 
+"strata_robustweights.r" <- function (data,
                                       strataname = NULL,
-                                      varname = NULL, 
-                                      gnh, 
-                                      method = c("si", "poisson", "rejective"), 
+                                      varname = NULL,
+                                      gnh,
+                                      method = c("si", "poisson", "rejective"),
                                       pii,
                                       typewin = "BHR",
                                       maxit = 10000,
@@ -753,6 +755,3 @@ hub.psi <- function(x, b = 1.345) {
   psi <- ifelse(abs(x) <= b, x, sign(x) * b)
   return(psi = psi)
 }
-
-
-
