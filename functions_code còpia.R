@@ -80,14 +80,7 @@
       # conditional bias
       bi <- HTcondbiasest(data, var, gn, method, pii, id="none", remerge=FALSE)
       # robust estimator
-      sink("/dev/null"); tt <- tryCatch(robustest(data, var, gn, method, pii)[[1]], warning=function(w) w); sink()
-      if (!is.numeric(tt)) {
-        if (tt$message == "Warning: please make sure that D is large enough and N/D is bounded\n") {
-          sink("/dev/null"); RHT <- suppressWarnings(robustest(data, var, gn, method, pii)[[1]]); sink()
-        }
-      } else {
-        RHT <- robustest(data, var, gn, method, pii)[[1]]
-      }
+      RHT <- robustest(data, var, gn, method, pii)[[1]]
     }
 
     # filling df2
@@ -107,14 +100,7 @@
       if (!missing(strataname) & !missing(gnh)) {
         new_weights <- strata_robustweights.r(data, strataname, var, gnh, method, pii, typewin=t, remerge=F)[,]
       } else {
-        sink("/dev/null"); tt <- tryCatch(robustweights.r(data, var, gn, method, ech$piks, typewin=t, remerge=F)[,], warning=function(w) w); sink()
-        if (!is.vector(tt)) {
-          if (tt$message == "Warning: please make sure that D is large enough and N/D is bounded\n") {
-            sink("/dev/null"); new_weights <- suppressWarnings(robustweights.r(data, var, gn, method, ech$piks, typewin=t, remerge=F)[,]); sink()
-          } 
-        } else {
-          new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin=t, remerge=F)[,]
-        }
+        new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin=t, remerge=F)[,]
       }
       # HT estimator
       if (!missing(strataname) & !missing(gnh)) {
@@ -190,7 +176,7 @@
     stop("your sample must contain at least 2 units\n")
   }
   if (sum(is.na(data[,varname])) != 0) {
-    stop("missing values for some y-variables\n")
+    stop("at least one missing value in the variable(s) of interest\n")
   }
   if (any(data[,varname] < 0)) {
     warning("Warning: your variable(s) of interest contain negative values\n")
@@ -214,8 +200,8 @@
   }
   if (method == "si" & !isTRUE(all.equal(gn, sum(1/pii)))) {
     warning("Warning: the sum of the inclusion probabilities is not equal to N\n")
-    print(paste("N:", gn))
-    print(paste("sum(1/pii):", sum(1/pii)))
+    print("N:, ", gn)
+    print("sum(1/pii):", sum(1/pii))
   }
   if (remerge==F) {
     if (missing(id)) {
@@ -393,18 +379,31 @@
                          gn,
                          method = c("si","poisson","rejective"),
                          pii) {
+  if (method == "si" & !isTRUE(all.equal(gn, sum(1/pii)))) {
+    warning("Warning: the sum of the inclusion probabilities is not equal to N\n")
+    print("N:, ", gn)
+    print("sum(1/pii):", sum(1/pii))
+  }
+  if (missing(method) | length(method) > 1) {
+    warning("Warning: the method is not specified or multiple methods are specified.\nBy default, the method is 'si'\n")
+    method = "si"
+  }
+  if (!(method %in% c("si", "poisson", "rejective")))
+    stop("the name of the method is wrong\n")
+  if (method %in% c("poisson", "rejective") & missing(pii))
+    stop("the vector of probabilities is missing\n")
+  if  (missing(gn))
+    stop("the population size is missing\n")
   data = data.frame(data)
   pn = nrow(data)
   index = 1:nrow(data)
   m = match(varname, colnames(data))
-  if (any(is.na(m))) {
+  if (any(is.na(m)))
     stop("the name of the variable is wrong\n")
-  }
   data2 = cbind.data.frame(data[, m], index)
   colnames(data2) = c(varname, "index")
-  if (any(is.na(data[,m]))) {
-    stop("missing values for some y-variables\n")
-  }
+  if (any(is.na(data[,m])))
+    stop("Missing values for some y-variables\n")
   if (length(m) == 1) {
     htestim = crossprod(data[,m], 1/pii)
     htbc = HTcondbiasest(data=data, varname=varname, gn=gn, method=method, pii=pii, id="none")[,c(seq(1+length(data),length(data)+length(varname)))]
@@ -513,15 +512,25 @@ tuningconst = function(bi) {
                               gn,
                               method = "si",
                               pii,
-                              typewin = NULL,
+                              typewin = "BHR",
                               maxit = 10000,
                               remerge = T) {
+  if (missing(method) | length(method) > 1) {
+      warning("Warning: the method is not specified or multiple methods are specified.\nBy default, the method is 'si'\n")
+      method = "si"
+  }
+  if (!(method %in% c("si", "poisson", "rejective"))) {
+    stop("the name of the method is wrong\n")
+  }
   if (missing(typewin)) {
     warning("Warning: the type of winsorization is not specified; by default, the method is BHR\n")
     typewin = "BHR"
   }
   if (!(typewin %in% c("BHR", "standard", "DT"))) {
     stop("the name of the type of winsorization  is wrong\n")
+  }
+  if (missing(pii)) {
+    stop("the vector of probabilities is missing\n")
   }
   data = data.frame(data)
   pn = nrow(data)
@@ -534,7 +543,7 @@ tuningconst = function(bi) {
   colnames(data2) = c(varname, "index")
   bc = HTcondbiasest(data, varname, gn, method, pii, id="none", remerge=F)
   if (length(m) != ncol(bc)) {
-    stop("the number of conditional biases is different from the number of interest variables\n")
+    stop("the number of conditional bias is different from the number of variable of study\n")
   }
   if (typewin == "BHR") {
     if (length(m) == 1){
@@ -624,7 +633,7 @@ tuningconst = function(bi) {
                                       gnh,
                                       method = c("si", "poisson", "rejective"),
                                       pii,
-                                      typewin = NULL,
+                                      typewin = "BHR",
                                       maxit = 10000,
                                       remerge = T) {
   if (missing(gnh)) {
@@ -646,6 +655,9 @@ tuningconst = function(bi) {
   if (missing(typewin)) {
     warning("Warning: the type of winsorization is not specified; by default, the method is BHR\n")
     typewin = "BHR"
+  }
+  if (!(typewin %in% c("BHR", "standard", "DT"))) {
+    stop("the name of the type of winsorization  is wrong\n")
   }
   x1 = data.frame(unique(data[,ms]))
   matw = matrix(0,nrow=nrow(data),ncol=length(m))
