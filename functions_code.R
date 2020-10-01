@@ -111,7 +111,7 @@
         if (!is.vector(tt)) {
           if (tt$message == "Warning: please make sure that D is large enough and N/D is bounded\n") {
             sink("/dev/null"); new_weights <- suppressWarnings(robustweights.r(data, var, gn, method, ech$piks, typewin=t, remerge=F)[,]); sink()
-          } 
+          }
         } else {
           new_weights <- robustweights.r(data, var, gn, method, ech$piks, typewin=t, remerge=F)[,]
         }
